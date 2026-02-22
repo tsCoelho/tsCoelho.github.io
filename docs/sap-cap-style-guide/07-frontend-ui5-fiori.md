@@ -312,6 +312,57 @@ oModel.submitChanges({ groupId: 'myBatch' });
 
 ---
 
+## Warning: Do Not Copy OData Data into JSON Models
+
+Loading data from the OData model into a client-side JSON model is a common anti-pattern that silently breaks the OData binding lifecycle.
+
+**The problem:**
+
+```js
+// BAD — Reading OData data and copying it into a JSON model
+const oModel = this.getModel();
+oModel.read('/Orders', {
+  success: function(oData) {
+    const oJsonModel = new sap.ui.model.json.JSONModel(oData.results);
+    this.getView().setModel(oJsonModel, 'orders');
+  }.bind(this)
+});
+```
+
+This bypasses the OData client entirely:
+
+- Two-way binding to the backend is lost — edits do not propagate back via `submitChanges`
+- OData type information, formatting, and currency/unit handling are lost
+- Delta tracking and deferred groups no longer apply
+- The data becomes a stale snapshot that diverges from the server state
+
+**When JSON models ARE appropriate:**
+
+Use a JSON model only for data that is **not** sourced from the OData backend:
+
+- UI state flags (`{ busy: false, editMode: false }`)
+- Static dropdown options or configuration values
+- Visualization control data (chart axis ranges, toggle states)
+- Transient form input before it is validated and submitted
+
+```js
+// GOOD — JSON model for local UI state only
+const oViewModel = new sap.ui.model.json.JSONModel({
+  busy: false,
+  editMode: false,
+  selectedTab: 'overview'
+});
+this.getView().setModel(oViewModel, 'viewModel');
+
+// GOOD — OData data stays in the OData model, bound declaratively
+oList.bindItems({
+  path: '/Orders',
+  parameters: { $select: 'ID,status', $expand: 'customer' }
+});
+```
+
+---
+
 ## Internationalization (i18n)
 
 Every user-visible string must be in i18n files. No hardcoded strings in views or controllers.
@@ -428,6 +479,7 @@ const sMessage = this.getModel('i18n').getResourceBundle().getText('submitOrderC
 - [ ] Freestyle: one controller per view, extends `BaseController`
 - [ ] All user-visible strings in i18n files
 - [ ] OData binding used — no manual fetch/AJAX calls to the backend
+- [ ] JSON models used only for local UI state — OData backend data is not copied into a JSON model
 - [ ] `manifest.json` declares correct OData version (v4 for CAP)
 - [ ] Custom CSS scoped to app namespace, no global SAP class overrides
 - [ ] `minUI5Version` set to the agreed-upon minimum in `manifest.json`
